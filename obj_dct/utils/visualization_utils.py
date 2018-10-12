@@ -61,11 +61,11 @@ STANDARD_COLORS = [
     'Teal', 'Thistle', 'Tomato', 'Turquoise', 'Violet', 'Wheat', 'White',
     'WhiteSmoke', 'Yellow', 'YellowGreen'
 ]
-
+# 전역변수 선언
 global count_stat
-count_stat = 0
+count_stat = 0 # 위험 상활 발생시 알림 전송을 위한 대기 시간 변수
 import urllib.request
-global is_warning
+global is_warning # 해당 CCTV 상태 변수
 is_warning = False
 
 
@@ -607,7 +607,7 @@ def visualize_boxes_and_labels_on_image_array(
   box_to_instance_masks_map = {}
   box_to_instance_boundaries_map = {}
   box_to_keypoints_map = collections.defaultdict(list)
-
+# 매 프레임에서 인식되는 객체의 이름을 저장할 리스트
   e_list = []
 
   if not max_boxes_to_draw:
@@ -615,7 +615,7 @@ def visualize_boxes_and_labels_on_image_array(
   for i in range(min(max_boxes_to_draw, boxes.shape[0])):
     if scores is None or scores[i] > min_score_thresh:
       box = tuple(boxes[i].tolist())
-      if instance_masks is not None:
+      if instance_masks is not None: # 인식하는 개체에 필수 변수가 존재하지 않는다면 재설정합니다.
         box_to_instance_masks_map[box] = instance_masks[i]
       if instance_boundaries is not None:
         box_to_instance_boundaries_map[box] = instance_boundaries[i]
@@ -629,10 +629,10 @@ def visualize_boxes_and_labels_on_image_array(
           if not agnostic_mode:
             if classes[i] in category_index.keys():
               class_name = category_index[classes[i]]['name']
-              e_list.append(class_name)
+              e_list.append(class_name) # 해당 화면에서 인식된 개체의 이름을 리스트에 저장합니다
             else:
-              class_name = 'N/A'
-            display_str = str(class_name)
+              class_name = 'N/A' # 해당 화면에 인식된 객체의 이름이 존재하지 않는다면
+            display_str = str(class_name) # 그 전까지 인식한 객체들만 표시
 
         if not skip_scores:
           if not display_str:
@@ -681,57 +681,45 @@ def visualize_boxes_and_labels_on_image_array(
           use_normalized_coordinates=use_normalized_coordinates)
 
 
-  if 'warning' in e_list:
+  if 'warning' in e_list: # 해당 화면에 인식된 개체의 이름을 저장한 리스트에서 위험한 상황에 처한 객체가 있는지 확인합니다.
       emergency_count(True)  # 있다면 카운터 증가
       emergency_check()
-      if count_stat < 10:
+      if count_stat < 10: # 10초의 시간을 기다린 후에도 위험한 상황이 인식된다면
         print("위험 상황을 확인했습니다. {}초 후 알림을 전송합니다.".format(10 - count_stat))
-      else:
+      else: # 알림 전송
           print("알림을 전송합니다. 위험 상황 발생 {}초 경과".format(count_stat))
       return image
   else:
       emergency_count(False)  # 없다면 카운터 초기화 및 현 상황 변동 확인
-      emergency_check()
+      emergency_check() # 확인된 위험이 없으므로 현재 CCTV의 상태를 return 합니다.
       print("확인된 위험이 없습니다. 위험상태: {}".format(is_warning))
       return image
 
-  # for status in e_list: # 현재 CCTV 영상속에 모델이 인식한 모든 객체 중에 위험상황이 있는지 확인합니다.
-  #     if status == 'warning':
-  #         emergency_count(True) # 있다면 카운터 증가
-  #         emergency_check()
-  #         print(count_stat)
-  #         return image
-  #
-  #     emergency_count(False) # 없다면 카운터 초기화 및 현 상황 변동 확인
-  #     emergency_check()
-  #     print(count_stat)
-  #     return image
 
 def emergency_count(stat): # 위험한 상태 확인, 일정 시간을 대기하기 위해 카운트하는 함수
     global count_stat, is_warning # 카운트하는 int형과 현재 CCTV 위치의 위험 상태를 알려주는 boolean형 전역 변수
-    if stat:
+    if stat: # 위험한 상황을 인식하였으므로 카운트 1 증가
         count_stat = count_stat + 1
     else:
         count_stat = 0
         data = {'cam_id': 1, 'alert': 'safe'} # 위험 상태가 없다고 판단하여 CCTV의 위험 상태를 safe로 바꿉니다
-        if is_warning:
-            data_en = urllib.parse.urlencode(data).encode('utf-8')
+        if is_warning:  # HTTP 방식으로 서버에 전송
+            data_en = urllib.parse.urlencode(data).encode('utf-8') # 서버의 주소로 CCTV의 상태를 update합니다.
             req = urllib.request.Request(url='http://220.67.124.240:8000/index', data=data_en, method='PUT')
             with urllib.request.urlopen(req) as f:
                 pass
-        is_warning = False
+        is_warning = False # CCTV의 상태 위험하지 않음으로 변경
 
 def emergency_check():
-    global count_stat,is_warning
+    global count_stat,is_warning # 전역 변수인 알림 대기 시간과 현 위험상태 변수를 받습니다.
     if count_stat> 10: # 일정 시간 이후에도 지속적인 위험 상황 확인
         data = {'cam_id': 1, 'alert': 'warning'} # 현재 위치에 있는 CCTV의 위험 상태를 위험으로 바꿉니다.
-        # print(is_warning)
-        if not is_warning: # 서버에 전송
-            data_en = urllib.parse.urlencode(data).encode('utf-8')
+        if not is_warning: # HTTP 방식으로 서버에 전송
+            data_en = urllib.parse.urlencode(data).encode('utf-8') # 서버의 주소로 CCTV의 상태를 update합니다.
             req = urllib.request.Request(url='http://220.67.124.240:8000/index', data=data_en, method='PUT')
             with urllib.request.urlopen(req) as f:
                 pass
-            is_warning = True
+            is_warning = True # CCTV의 상태 위험으로 변경
         pass
 
 
